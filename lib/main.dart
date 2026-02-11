@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'package:unibus/screens/Topup.dart';
-import 'package:unibus/screens/homescreen.dart';
 import 'package:unibus/screens/login.dart';
-import 'package:unibus/screens/splashscreen.dart';
 import 'package:unibus/screens/transactions.dart';
 
 void main() async {

@@ -12,24 +12,27 @@ class AuthService {
   static Future<void> register({
     required String studentId,
     required String password,
-    
-
   }) async {
     try {
+      final formattedId = studentId.trim().toUpperCase();
+      final email = "$formattedId@unibus.app";
+
       // 1️⃣ Check if Student ID exists in students collection
       final studentDoc = await _firestore
           .collection('students')
-          .doc(studentId)
+          .doc(formattedId)
           .get();
 
       if (!studentDoc.exists) {
         throw Exception('Invalid Student ID');
       }
 
+      final studentData = studentDoc.data()!;
+
       // 2️⃣ Prevent duplicate registration
       final existingUser = await _firestore
           .collection('users')
-          .where('studentId', isEqualTo: studentId)
+          .where('studentId', isEqualTo: formattedId)
           .limit(1)
           .get();
 
@@ -38,30 +41,29 @@ class AuthService {
       }
 
       // 3️⃣ Create Firebase Auth account
-      final email = "$studentId@unibus.app";
-
       final credential =
           await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // 4️⃣ Create user profile in Firestore
+      // 4️⃣ Copy student data into users collection
       await _firestore
           .collection('users')
           .doc(credential.user!.uid)
           .set({
-        'studentId': studentId,
+        'studentId': formattedId,
+        'name': studentData['name'] ?? "",
+        'batch': studentData['batch'] ?? "",
+        'year': studentData['year'] ?? "",
+        'cardStatus': studentData['cardStatus'] ?? "inactive",
         'role': 'student',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
     } on FirebaseAuthException catch (e) {
-  print("ERROR CODE: ${e.code}");
-  print("ERROR MESSAGE: ${e.message}");
-  throw Exception(e.code);
-}
-
+      throw Exception(_handleAuthError(e));
+    }
   }
 
   /// =========================
@@ -72,8 +74,8 @@ class AuthService {
     required String password,
   }) async {
     try {
-      final email = "${studentId.toLowerCase()}@unibus.app";
-
+      final formattedId = studentId.trim().toUpperCase();
+      final email = "$formattedId@unibus.app";
 
       await _auth.signInWithEmailAndPassword(
         email: email,
@@ -90,20 +92,6 @@ class AuthService {
   /// =========================
   static Future<void> logout() async {
     await _auth.signOut();
-  }
-
-  /// =========================
-  /// CHANGE PASSWORD
-  /// =========================
-  static Future<void> changePassword(
-      String newPassword) async {
-    final user = _auth.currentUser;
-
-    if (user == null) {
-      throw Exception('User not logged in');
-    }
-
-    await user.updatePassword(newPassword);
   }
 
   /// =========================
