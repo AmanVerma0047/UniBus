@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:unibus/screens/Topup.dart';
 import 'package:unibus/screens/homescreen.dart';
+import 'package:unibus/screens/login.dart';
 import 'package:unibus/screens/splashscreen.dart';
 import 'package:unibus/screens/transactions.dart';
 
@@ -38,6 +39,7 @@ class UniBusApp extends StatelessWidget {
       routes: {
       '/transaction': (context) => const TransactionsPage(),
       '/topup':(context) => const Topup(),
+      '/login':(context) => const LoginScreen(),
       },
     );
   }

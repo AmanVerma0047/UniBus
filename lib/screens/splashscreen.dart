@@ -3,18 +3,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:async';
 import 'package:unibus/screens/homescreen.dart';
-
-void main() {
-  runApp(MyApp());
-}
+import 'package:unibus/screens/login.dart';
 
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: SplashScreen(),
-    );
+    return MaterialApp(debugShowCheckedModeBanner: false, home: SplashScreen());
   }
 }
 
@@ -28,9 +22,11 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => HomeScreen()),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
     });
   }
@@ -41,8 +37,8 @@ class _SplashScreenState extends State<SplashScreen> {
       backgroundColor: const Color(0xFF7FC014),
       body: Center(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center, 
-          crossAxisAlignment: CrossAxisAlignment.center, 
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Lottie.asset(
               'assets/animation.json',
@@ -54,7 +50,7 @@ class _SplashScreenState extends State<SplashScreen> {
               'UNIBUS',
               style: GoogleFonts.righteous(
                 color: Colors.black,
-                fontSize: 32, 
+                fontSize: 32,
                 letterSpacing: 1.5,
               ),
             ),
