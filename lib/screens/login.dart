@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:unibus/screens/register.dart';
+import '../services/auth_service.dart';
+import 'register.dart';
+import 'homescreen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,20 +27,51 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final studentId = _studentIdController.text.trim();
+      final studentId =
+          _studentIdController.text.trim().toLowerCase();
       final password = _passwordController.text.trim();
 
-      // TODO: call AuthService.login(studentId, password)
+      await AuthService.login(
+        studentId: studentId,
+        password: password,
+      );
 
-      // On success → navigate to dashboard
-      // Navigator.pushReplacement(...)
-    } catch (e) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        const SnackBar(content: Text("Login Successful")),
+      );
+
+      // Navigate to Home Screen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const HomeScreen(),
+        ),
+      );
+
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceAll('Exception: ', ''),
+          ),
+        ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _studentIdController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -51,15 +84,17 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Form(
               key: _formKey,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment:
+                    CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 40),
 
-                  // Logo / Title
+                  // Logo & Title
                   Column(
                     children: const [
                       Icon(Icons.directions_bus,
-                          size: 80, color: Colors.blue),
+                          size: 80,
+                          color: Colors.blue),
                       SizedBox(height: 16),
                       Text(
                         'UniBus',
@@ -86,11 +121,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _studentIdController,
                     decoration: const InputDecoration(
                       labelText: 'Student ID',
-                      prefixIcon: Icon(Icons.badge),
-                      border: OutlineInputBorder(),
+                      prefixIcon:
+                          Icon(Icons.badge),
+                      border:
+                          OutlineInputBorder(),
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (value == null ||
+                          value.isEmpty) {
                         return 'Student ID is required';
                       }
                       return null;
@@ -102,24 +140,34 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Password
                   TextFormField(
                     controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
+                    obscureText:
+                        _obscurePassword,
+                    decoration:
+                        InputDecoration(
                       labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword
-                            ? Icons.visibility
-                            : Icons.visibility_off),
+                      prefixIcon:
+                          const Icon(Icons.lock),
+                      border:
+                          const OutlineInputBorder(),
+                      suffixIcon:
+                          IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons
+                                  .visibility_off,
+                        ),
                         onPressed: () {
                           setState(() {
-                            _obscurePassword = !_obscurePassword;
+                            _obscurePassword =
+                                !_obscurePassword;
                           });
                         },
                       ),
                     ),
                     validator: (value) {
-                      if (value == null || value.length < 8) {
+                      if (value == null ||
+                          value.length < 8) {
                         return 'Password must be at least 8 characters';
                       }
                       return null;
@@ -128,18 +176,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 30),
 
-                  // Login button
+                  // Login Button
                   SizedBox(
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
+                      onPressed:
+                          _isLoading
+                              ? null
+                              : _login,
                       child: _isLoading
                           ? const CircularProgressIndicator(
-                              color: Colors.white,
+                              color:
+                                  Colors.white,
                             )
                           : const Text(
                               'Login',
-                              style: TextStyle(fontSize: 16),
+                              style: TextStyle(
+                                  fontSize: 16),
                             ),
                     ),
                   ),
@@ -148,18 +201,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // Register link
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment:
+                        MainAxisAlignment
+                            .center,
                     children: [
-                      const Text("Don't have an account?"),
+                      const Text(
+                          "Don't have an account?"),
                       TextButton(
                         onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (_) => const RegisterScreen()),
+                              builder: (_) =>
+                                  const RegisterScreen(),
+                            ),
                           );
                         },
-                        child: const Text('Register'),
+                        child:
+                            const Text('Register'),
                       ),
                     ],
                   ),

@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+
 import 'package:unibus/screens/Topup.dart';
 import 'package:unibus/screens/homescreen.dart';
 import 'package:unibus/screens/login.dart';
 import 'package:unibus/screens/splashscreen.dart';
 import 'package:unibus/screens/transactions.dart';
 
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-void main() {
-  runApp(UniBusApp());
+  await Firebase.initializeApp();
+
+  runApp(const UniBusApp());
 }
 
 class UniBusApp extends StatelessWidget {
@@ -18,31 +23,24 @@ class UniBusApp extends StatelessWidget {
     return MaterialApp(
       title: 'UniBus',
       debugShowCheckedModeBanner: false,
-      
       theme: ThemeData(
-        primaryColor: const Color(0xFF7FC014), // sets main brand color
+        primaryColor: const Color(0xFF7FC014),
         scaffoldBackgroundColor: Colors.white,
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF7FC014),
         ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF7FC014),
-          foregroundColor: Colors.white, // text & icons in AppBar
+          foregroundColor: Colors.white,
           elevation: 0,
         ),
-        floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Color(0xFF7FC014),
-          foregroundColor: Colors.white,
-        ),
       ),
-      home: MyApp(),
+      home: const LoginScreen(), // temporarily start with login
       routes: {
-      '/transaction': (context) => const TransactionsPage(),
-      '/topup':(context) => const Topup(),
-      '/login':(context) => const LoginScreen(),
+        '/transaction': (context) => const TransactionsPage(),
+        '/topup': (context) => const Topup(),
+        '/login': (context) => const LoginScreen(),
       },
     );
   }
 }
-
-
