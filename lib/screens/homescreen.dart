@@ -12,7 +12,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:unibus/screens/Topup.dart';
 import 'package:unibus/screens/ecard.dart';
 import 'package:unibus/screens/notifications.dart';
+import 'package:unibus/screens/profilescreen.dart';
 import 'package:unibus/screens/transactions.dart';
+import 'package:unibus/screens/login.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,6 +50,33 @@ class _HomeScreenState extends State<HomeScreen> {
           'UniBus',
           style: GoogleFonts.righteous(color: Colors.black, fontSize: 24),
         ),
+        actions: [
+          // 🔔 Notifications
+          IconButton(
+            icon: const Icon(Icons.notifications_none, color: Colors.black),
+            onPressed: () {
+              _onOptionSelected(3);
+            },
+          ),
+
+          // 👤 Avatar
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                );
+              },
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.green.shade700,
+                child: const Icon(Icons.person, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+        ],
       ),
       body: _pages[_currentIndex],
       floatingActionButton: FloatingActionButton.large(
@@ -98,7 +127,7 @@ class HomeContent extends StatefulWidget {
   @override
   State<HomeContent> createState() => _HomeContentState();
 }
-//accessing the data from firebase
+
 class _HomeContentState extends State<HomeContent> {
   final GlobalKey _cardKey = GlobalKey();
 
@@ -109,6 +138,7 @@ class _HomeContentState extends State<HomeContent> {
   String batch = "";
   String year = "";
   String cardStatus = "";
+  String schedule = "";
 
   @override
   void initState() {
@@ -121,7 +151,6 @@ class _HomeContentState extends State<HomeContent> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      // 1 Get studentId from users collection
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -131,7 +160,6 @@ class _HomeContentState extends State<HomeContent> {
 
       final fetchedStudentId = userDoc['studentId'];
 
-      // 2 Fetch full student data
       final studentDoc = await FirebaseFirestore.instance
           .collection('students')
           .doc(fetchedStudentId)
@@ -147,6 +175,7 @@ class _HomeContentState extends State<HomeContent> {
         batch = data['batch'] ?? "";
         year = data['year'].toString();
         cardStatus = data['cardStatus'] ?? "";
+        schedule = data['schedule'] ?? "No schedule available";
         isLoading = false;
       });
     } catch (e) {
@@ -158,6 +187,7 @@ class _HomeContentState extends State<HomeContent> {
     try {
       final boundary =
           _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
@@ -166,8 +196,9 @@ class _HomeContentState extends State<HomeContent> {
       final file = File('${dir.path}/unibus_card.png');
       await file.writeAsBytes(pngBytes);
 
-      await Share.shareXFiles([XFile(file.path)],
-          text: 'Here’s my UniBus card 🚌');
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: 'Here’s my UniBus card 🚌');
     } catch (e) {
       debugPrint("Error sharing card: $e");
     }
@@ -179,7 +210,7 @@ class _HomeContentState extends State<HomeContent> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         children: [
@@ -198,7 +229,9 @@ class _HomeContentState extends State<HomeContent> {
             onSendTap: _shareCard,
           ),
           const SizedBox(height: 32),
-          const ScheduleTitle(),
+          MoreSection(onOptionSelected: widget.onOptionSelected),
+          const SizedBox(height: 32),
+          ScheduleTitle(schedule: schedule),
         ],
       ),
     );
@@ -243,23 +276,27 @@ class BusCard extends StatelessWidget {
                     Text(
                       cardNumber,
                       style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       holdername,
                       style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       validity,
                       style: const TextStyle(
-                          fontSize: 14, color: Colors.white70),
+                        fontSize: 14,
+                        color: Colors.white70,
+                      ),
                     ),
                   ],
                 ),
@@ -281,8 +318,7 @@ class OptionsRow extends StatelessWidget {
   final Function(int) onOptionSelected;
   final VoidCallback? onSendTap;
 
-  const OptionsRow(
-      {super.key, required this.onOptionSelected, this.onSendTap});
+  const OptionsRow({super.key, required this.onOptionSelected, this.onSendTap});
 
   @override
   Widget build(BuildContext context) {
@@ -290,10 +326,12 @@ class OptionsRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _option(Icons.share, "Send", onSendTap),
-        _option(Icons.receipt_long, "Bills",
-            () => onOptionSelected(1)),
-        _option(Icons.account_balance_wallet, "Topup",
-            () => onOptionSelected(2)),
+        _option(Icons.receipt_long, "Bills", () => onOptionSelected(1)),
+        _option(
+          Icons.account_balance_wallet,
+          "Topup",
+          () => onOptionSelected(2),
+        ),
       ],
     );
   }
@@ -310,11 +348,7 @@ class OptionsRow extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
-          children: [
-            Icon(icon),
-            const SizedBox(height: 6),
-            Text(label),
-          ],
+          children: [Icon(icon), const SizedBox(height: 6), Text(label)],
         ),
       ),
     );
@@ -322,30 +356,82 @@ class OptionsRow extends StatelessWidget {
 }
 
 class ScheduleTitle extends StatelessWidget {
-  const ScheduleTitle({super.key});
+  final String schedule;
+
+  const ScheduleTitle({super.key, required this.schedule});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(
-          'Schedule',
-          style: GoogleFonts.righteous(fontSize: 20),
-        ),
+        Text('Schedule', style: GoogleFonts.righteous(fontSize: 20)),
         const SizedBox(height: 16),
         Card(
           color: const Color(0xFF7FC014),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: const Padding(
-            padding: EdgeInsets.all(30),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(30),
             child: Text(
-              '8:27 AM | Sainik Gate',
-              style: TextStyle(color: Colors.white, fontSize: 18),
+              schedule,
+              style: const TextStyle(color: Colors.white, fontSize: 18),
             ),
           ),
-        )
+        ),
       ],
+    );
+  }
+}
+
+class MoreSection extends StatelessWidget {
+  final Function(int) onOptionSelected;
+
+  const MoreSection({super.key, required this.onOptionSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _moreOption(
+              Icons.notifications,
+              "Notifications",
+              () => onOptionSelected(3),
+            ),
+            _moreOption(Icons.credit_card, "E-Card", () => onOptionSelected(4)),
+            _moreOption(Icons.logout, "Logout", () async {
+              await FirebaseAuth.instance.signOut();
+
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
+              );
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _moreOption(IconData icon, String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 90,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [Icon(icon), const SizedBox(height: 6), Text(label)],
+        ),
+      ),
     );
   }
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:async';
-import 'package:unibus/screens/homescreen.dart';
 import 'package:unibus/screens/login.dart';
 
 class MyApp extends StatelessWidget {

@@ -17,7 +17,7 @@ class AuthService {
       final formattedId = studentId.trim().toUpperCase();
       final email = "$formattedId@unibus.app";
 
-      // 1️⃣ Check if Student ID exists in students collection
+      // 1 Check if Student ID exists in students collection
       final studentDoc = await _firestore
           .collection('students')
           .doc(formattedId)
@@ -29,7 +29,7 @@ class AuthService {
 
       final studentData = studentDoc.data()!;
 
-      // 2️⃣ Prevent duplicate registration
+      // 2 Prevent duplicate registration
       final existingUser = await _firestore
           .collection('users')
           .where('studentId', isEqualTo: formattedId)
@@ -40,14 +40,14 @@ class AuthService {
         throw Exception('Account already exists');
       }
 
-      // 3️⃣ Create Firebase Auth account
+      // 3 Create Firebase Auth account
       final credential =
           await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // 4️⃣ Copy student data into users collection
+      // 4 Copy student data into users collection
       await _firestore
           .collection('users')
           .doc(credential.user!.uid)
