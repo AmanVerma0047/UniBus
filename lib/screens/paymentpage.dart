@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-/// Payment Page
-class PaymentPage extends StatelessWidget {
+import 'package:unibus/screens/upiappspage.dart';
+import 'package:upi_pay/upi_pay.dart';
+import 'package:http/http.dart' as http;
+import 'package:unibus/services/API_KEYS.dart';
+class PaymentPage extends StatefulWidget {
   final String stop;
   final String duration;
   final int amount;
@@ -13,6 +16,77 @@ class PaymentPage extends StatelessWidget {
     required this.duration,
     required this.amount,
   });
+
+  @override
+  State<PaymentPage> createState() => _PaymentPageState();
+}
+
+class _PaymentPageState extends State<PaymentPage> {
+  final UpiPay _upiPay = UpiPay();
+
+  Future<void> startPayment() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    await Future.delayed(const Duration(seconds: 1));
+
+    final response = await _upiPay.initiateTransaction(
+      app: UpiApplication.googlePay, // direct open (best guess)
+      receiverUpiAddress: ApiKeys.receiverupiID,
+      receiverName: "UniBus",
+      transactionRef: DateTime.now().millisecondsSinceEpoch.toString(),
+      transactionNote: "Bus Pass Payment",
+      amount: widget.amount.toString(),
+    );
+
+    Navigator.pop(context); // remove loader
+
+    if (response.status == UpiTransactionStatus.success) {
+      await sendEmail();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("✅ Payment Successful!"),
+          backgroundColor: Color(0XFF7FC014),
+        ),
+      );
+
+      Future.delayed(const Duration(milliseconds: 800), () {
+        Navigator.pop(context);
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ Payment Failed or Cancelled"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> sendEmail() async {
+    await http.post(
+      Uri.parse("https://api.emailjs.com/api/v1.0/email/send"),
+      headers: {
+        "origin": "http://localhost",
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "service_id": ApiKeys.emailJsServiceId,
+        "template_id": ApiKeys.emailJsTemplateId,
+        "user_id": ApiKeys.emailJsTemplateId,
+        "template_params": {
+          "to_email": "student@email.com",
+          "stop": widget.stop,
+          "duration": widget.duration,
+          "amount": widget.amount.toString(),
+        },
+      }),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,10 +114,7 @@ class PaymentPage extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(
-                    'assets/upiqr.jpeg', // <-- replace with your image path
-                    fit: BoxFit.contain,
-                  ),
+                  child: Image.asset('assets/upiqr.jpeg', fit: BoxFit.contain),
                 ),
                 const SizedBox(height: 16),
 
@@ -53,36 +124,24 @@ class PaymentPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                Text("Stop: $stop"),
-                Text("Duration: $duration"),
-                Text("Amount: ₹$amount"),
+                Text("Stop: ${widget.stop}"),
+                Text("Duration: ${widget.duration}"),
+                Text("Amount: ₹${widget.amount}"),
 
                 const SizedBox(height: 24),
 
                 ElevatedButton(
                   onPressed: () {
-                    // ✅ Show SnackBar at the top
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text(
-                          "✅ Payment Successful!",
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => UpiAppsPage(
+                          stop: widget.stop,
+                          duration: widget.duration,
+                          amount: widget.amount,
                         ),
-                        behavior: SnackBarBehavior.floating,
-                        margin: const EdgeInsets.only(
-                          top: 16, // distance from the top
-                          left: 16,
-                          right: 16,
-                        ),
-                        backgroundColor: const Color(0XFF7FC014),
-                        duration: const Duration(seconds: 2),
                       ),
                     );
-
-                    // Optional: delay navigation slightly for better UX
-                    Future.delayed(const Duration(milliseconds: 800), () {
-                      Navigator.pop(context);
-                    });
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
@@ -94,14 +153,14 @@ class PaymentPage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child:Text(
-                      'Pay Now',
-                      style: GoogleFonts.righteous(
-                        color: Color(0xFF7FC014),
-                        fontSize: 24,
-                      ),
+                  child: Text(
+                    'Pay Now',
+                    style: GoogleFonts.righteous(
+                      color: const Color(0xFF7FC014),
+                      fontSize: 24,
                     ),
                   ),
+                ),
               ],
             ),
           ),
