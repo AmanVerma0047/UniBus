@@ -19,6 +19,7 @@ class _ECardState extends State<ECard> {
   String batch = "";
   String year = "";
   String cardStatus = "";
+  DateTime? expiryDate;
 
   @override
   void initState() {
@@ -31,7 +32,6 @@ class _ECardState extends State<ECard> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      // Get studentId from users collection
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -41,7 +41,6 @@ class _ECardState extends State<ECard> {
 
       final fetchedStudentId = userDoc['studentId'];
 
-      // Get student details
       final studentDoc = await FirebaseFirestore.instance
           .collection('students')
           .doc(fetchedStudentId)
@@ -51,12 +50,28 @@ class _ECardState extends State<ECard> {
 
       final data = studentDoc.data()!;
 
+      // Auto-check expiry and update cardStatus if expired
+      DateTime? parsedExpiry;
+      if (data['expiryDate'] != null) {
+        parsedExpiry = (data['expiryDate'] as Timestamp).toDate();
+        final isExpired = parsedExpiry.isBefore(DateTime.now());
+
+        if (isExpired && data['cardStatus'] == 'active') {
+          await FirebaseFirestore.instance
+              .collection('students')
+              .doc(fetchedStudentId)
+              .update({'cardStatus': 'inactive'});
+          data['cardStatus'] = 'inactive';
+        }
+      }
+
       setState(() {
         studentId = fetchedStudentId;
         name = data['name'] ?? "";
         batch = data['batch'] ?? "";
         year = data['year'].toString();
-        cardStatus = data['cardStatus'] ?? "";
+        cardStatus = data['cardStatus'] ?? "inactive";
+        expiryDate = parsedExpiry;
         isLoading = false;
       });
     } catch (e) {
@@ -64,11 +79,22 @@ class _ECardState extends State<ECard> {
     }
   }
 
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body: Center(child: CircularProgressIndicator()));
     }
+
+    final bool isActive = cardStatus.toLowerCase() == "active";
 
     return Scaffold(
       backgroundColor: Colors.grey[100],
@@ -86,20 +112,30 @@ class _ECardState extends State<ECard> {
 
           Center(
             child: Container(
-              width: 280,
-              height: 450,
+              width: 300,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
                 gradient: LinearGradient(
-                  colors: cardStatus.toLowerCase() == "inactive"
-                      ? [Color(0xFFE53935), Color(0xFFB71C1C)]
-                      : [Color(0xFF8BC34A), Color(0xFF33691E)],
+                  colors: isActive
+                      ? [const Color(0xFF8BC34A), const Color(0xFF33691E)]
+                      : [const Color(0xFFE53935), const Color(0xFFB71C1C)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: (isActive
+                            ? const Color(0xFF7FC014)
+                            : Colors.red)
+                        .withOpacity(0.4),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: Stack(
                 children: [
+                  // Decorative circles
                   Positioned(
                     top: 40,
                     left: -30,
@@ -107,7 +143,7 @@ class _ECardState extends State<ECard> {
                       width: 150,
                       height: 150,
                       decoration: const BoxDecoration(
-                        color: Color(0x33000000),
+                        color: Color(0x22000000),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -119,69 +155,168 @@ class _ECardState extends State<ECard> {
                       width: 160,
                       height: 160,
                       decoration: const BoxDecoration(
-                        color: Color(0x33000000),
+                        color: Color(0x22000000),
                         shape: BoxShape.circle,
                       ),
                     ),
                   ),
 
                   Padding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const EdgeInsets.all(24.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "Validity : ${cardStatus.toUpperCase()}",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        // Status badge
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isActive
+                                        ? Icons.check_circle
+                                        : Icons.cancel,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    cardStatus.toUpperCase(),
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Bus icon
+                            const Icon(Icons.directions_bus_rounded,
+                                color: Colors.white70, size: 28),
+                          ],
                         ),
-                        const SizedBox(height: 30),
 
-                        const Text(
+                        const SizedBox(height: 24),
+
+                        // College name
+                        Text(
                           "The Study Hall\nCollege",
-                          style: TextStyle(
+                          style: GoogleFonts.righteous(
                             color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 22,
                             height: 1.2,
                           ),
                         ),
-                        const SizedBox(height: 10),
 
+                        const SizedBox(height: 12),
+
+                        // Student name
                         Text(
-                          "$name ($batch) Year $year",
-                          style: const TextStyle(
+                          name,
+                          style: GoogleFonts.poppins(
                             color: Colors.white,
-                            fontSize: 16,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
 
-                        const Spacer(),
+                        // Batch & Year
+                        Text(
+                          '$batch  •  Year $year',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
 
-                        Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: QrImageView(
-                              data:
-                                  "$studentId | $cardStatus | $name | $batch Year $year | The Study Hall College",
-                              version: QrVersions.auto,
-                              size: 120.0,
-                            ),
+                        // Student ID
+                        Text(
+                          studentId,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white60,
+                            fontSize: 12,
                           ),
                         ),
 
                         const SizedBox(height: 20),
+
+                        // Expiry date
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.calendar_today,
+                                  color: Colors.white70, size: 14),
+                              const SizedBox(width: 8),
+                              Text(
+                                expiryDate != null
+                                    ? 'Valid Until: ${_formatDate(expiryDate!)}'
+                                    : 'No active pass',
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // QR Code
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: QrImageView(
+                              data:
+                                  '$studentId|$cardStatus|$name|$batch Year $year|The Study Hall College',
+                              version: QrVersions.auto,
+                              size: 130.0,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Info note
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              isActive
+                  ? 'Show this card to the bus conductor for verification.'
+                  : 'Your pass has expired. Please recharge to activate your card.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: Colors.grey.shade600,
               ),
             ),
           ),

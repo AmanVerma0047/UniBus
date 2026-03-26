@@ -115,11 +115,18 @@ class _UpiAppsPageState extends State<UpiAppsPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.receipt_long, color: Color(0xFF7FC014), size: 20),
+                const Icon(
+                  Icons.receipt_long,
+                  color: Color(0xFF7FC014),
+                  size: 20,
+                ),
                 const SizedBox(width: 10),
                 Text(
                   '${widget.stop} · ${widget.duration}',
-                  style: GoogleFonts.poppins(fontSize: 13, color: Colors.black87),
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.black87,
+                  ),
                 ),
                 const Spacer(),
                 Text(
@@ -171,7 +178,11 @@ class _UpiAppsPageState extends State<UpiAppsPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.account_balance_wallet_outlined, size: 64, color: Colors.grey.shade400),
+          Icon(
+            Icons.account_balance_wallet_outlined,
+            size: 64,
+            color: Colors.grey.shade400,
+          ),
           const SizedBox(height: 16),
           Text(
             'No UPI apps found',
@@ -185,12 +196,18 @@ class _UpiAppsPageState extends State<UpiAppsPage> {
           Text(
             'Please install a UPI app like\nGPay, PhonePe, or Paytm',
             textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey.shade500),
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: Colors.grey.shade500,
+            ),
           ),
           const SizedBox(height: 16),
           TextButton(
             onPressed: _loadApps,
-            child: const Text('Retry', style: TextStyle(color: Color(0xFF7FC014))),
+            child: const Text(
+              'Retry',
+              style: TextStyle(color: Color(0xFF7FC014)),
+            ),
           ),
         ],
       ),
@@ -206,12 +223,18 @@ class _UpiAppsPageState extends State<UpiAppsPage> {
           const SizedBox(height: 16),
           Text(
             'Could not load UPI apps',
-            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 8),
           TextButton(
             onPressed: _loadApps,
-            child: const Text('Retry', style: TextStyle(color: Color(0xFF7FC014))),
+            child: const Text(
+              'Retry',
+              style: TextStyle(color: Color(0xFF7FC014)),
+            ),
           ),
         ],
       ),
@@ -243,8 +266,12 @@ class _AppTile extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: app.iconImage(48) ??
-              const Icon(Icons.account_balance_wallet, color: Color(0xFF7FC014)),
+          child:
+              app.iconImage(48) ??
+              const Icon(
+                Icons.account_balance_wallet,
+                color: Color(0xFF7FC014),
+              ),
         ),
       ),
       title: Text(

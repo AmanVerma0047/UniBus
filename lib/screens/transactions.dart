@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -6,47 +8,92 @@ class TransactionsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
     return Scaffold(
       backgroundColor: Colors.white,
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 5, bottom: 10),
-            child: Text(
-              'Transactions',
-              style: GoogleFonts.righteous(
-                color: Colors.black,
-                fontSize: 24,
-              ),
-            ),
-          ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('students')
+            .doc(uid)
+            .collection('transactions')       // ← subcollection under student
+            .orderBy('timestamp', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          // Loading state
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF7FC014)),
+            );
+          }
 
-          const TransactionCard(
-            month: "September",
-            title: "Sainik Gate",
-            amount: "₹500",
-            date: "20 September",
-          ),
-          const TransactionCard(
-            month: "August",
-            title: "Sainik Gate",
-            amount: "₹500",
-            date: "1 August",
-          ),
-          const TransactionCard(
-            month: "July",
-            title: "Sainik Gate",
-            amount: "₹500",
-            date: "3 July",
-          ),
-          const TransactionCard(
-            month: "June",
-            title: "Sainik Gate",
-            amount: "₹500",
-            date: "10 June",
-          ),
-        ],
+          // Error state
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                'Something went wrong.\n${snapshot.error}',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(color: Colors.red),
+              ),
+            );
+          }
+
+          final docs = snapshot.data?.docs ?? [];
+
+          return ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 5, bottom: 10),
+                child: Text(
+                  'Transactions',
+                  style: GoogleFonts.righteous(
+                    color: Colors.black,
+                    fontSize: 24,
+                  ),
+                ),
+              ),
+
+              // Empty state
+              if (docs.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 80),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.receipt_long_rounded,
+                          size: 64, color: Colors.grey.shade300),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No transactions yet',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Transaction cards from Firestore
+              ...docs.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+
+                // safely handle amount whether it's int or string
+                final rawAmount = data['amount'];
+                final displayAmount = '₹$rawAmount';
+
+                return TransactionCard(
+                  month: data['month'] ?? '',
+                  title: data['stop'] ?? 'Unknown Stop',
+                  amount: displayAmount,
+                  date: data['date'] ?? '',
+                  duration: data['duration'] ?? '',
+                );
+              }),
+            ],
+          );
+        },
       ),
     );
   }
@@ -57,6 +104,7 @@ class TransactionCard extends StatelessWidget {
   final String title;
   final String amount;
   final String date;
+  final String duration;
 
   const TransactionCard({
     super.key,
@@ -64,6 +112,7 @@ class TransactionCard extends StatelessWidget {
     required this.title,
     required this.amount,
     required this.date,
+    required this.duration,
   });
 
   @override
@@ -74,11 +123,11 @@ class TransactionCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(15),
         color: Colors.white,
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 6,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -87,7 +136,7 @@ class TransactionCard extends StatelessWidget {
         children: [
           Text(
             month,
-            style: const TextStyle(
+            style: GoogleFonts.poppins(
               fontWeight: FontWeight.bold,
               fontSize: 16,
             ),
@@ -101,11 +150,11 @@ class TransactionCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 15),
+                    style: GoogleFonts.poppins(fontSize: 15),
                   ),
                   Text(
-                    date,
-                    style: const TextStyle(
+                    '$date • $duration',
+                    style: GoogleFonts.poppins(
                       fontSize: 13,
                       color: Colors.black54,
                     ),
@@ -114,11 +163,11 @@ class TransactionCard extends StatelessWidget {
               ),
               Text(
                 amount,
-                style: const TextStyle(
+                style: GoogleFonts.poppins(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
-              )
+              ),
             ],
           ),
         ],

@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
@@ -58,6 +60,8 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
         _isLaunching = false;
         _emailFuture = _sendEmail();
       });
+
+      await _saveTransaction();
     } catch (e) {
       await Future.delayed(const Duration(seconds: 3));
       if (!mounted) return;
@@ -67,7 +71,69 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
         _isLaunching = false;
         _emailFuture = _sendEmail();
       });
+
+      await _saveTransaction();
     }
+  }
+
+  // Parses "1 month", "3 months", "6 months" → int
+  int _parseDurationMonths(String duration) {
+    final match = RegExp(r'(\d+)').firstMatch(duration);
+    return match != null ? int.parse(match.group(1)!) : 1;
+  }
+
+  Future<void> _saveTransaction() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final now = DateTime.now();
+      final txnRef = 'UNIBUS-${now.millisecondsSinceEpoch}';
+
+      // Calculate expiry from payment date + duration months
+      final months = _parseDurationMonths(widget.duration);
+      final expiryDate = DateTime(now.year, now.month + months, now.day);
+
+      // Save transaction under student subcollection
+      await FirebaseFirestore.instance
+          .collection('students')
+          .doc(uid)
+          .collection('transactions')
+          .doc(txnRef)
+          .set({
+        'stop': widget.stop,
+        'duration': widget.duration,
+        'amount': widget.amount,
+        'status': 'success',
+        'txnRef': txnRef,
+        'timestamp': FieldValue.serverTimestamp(),
+        'month': _monthName(now.month),
+        'date': '${now.day} ${_monthName(now.month)}',
+        'expiryDate': Timestamp.fromDate(expiryDate),
+      });
+
+      // Update student document with new expiry date and set card active
+      await FirebaseFirestore.instance
+          .collection('students')
+          .doc(uid)
+          .update({
+        'cardStatus': 'active',
+        'expiryDate': Timestamp.fromDate(expiryDate),
+      });
+
+      debugPrint('Transaction saved! Expiry: $expiryDate');
+    } catch (e) {
+      debugPrint('Firestore error: $e');
+    }
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'January', 'February', 'March', 'April',
+      'May', 'June', 'July', 'August',
+      'September', 'October', 'November', 'December'
+    ];
+    return months[month - 1];
   }
 
   Future<bool> _sendEmail() async {
@@ -91,8 +157,6 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
       );
 
       debugPrint('Email status: ${response.statusCode}');
-      debugPrint('Email body: ${response.body}');
-
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('Email error: $e');
@@ -175,7 +239,6 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
 
   Widget _buildResult() {
     final cfg = _statusConfig;
-
     return Center(
       key: const ValueKey('result'),
       child: Padding(
@@ -193,23 +256,16 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
               child: Icon(cfg.icon, size: 56, color: cfg.iconColor),
             ),
             const SizedBox(height: 24),
-            Text(
-              cfg.title,
-              style: GoogleFonts.righteous(fontSize: 24, color: Colors.black87),
-            ),
+            Text(cfg.title,
+                style: GoogleFonts.righteous(fontSize: 24, color: Colors.black87)),
             const SizedBox(height: 12),
             Text(
               cfg.subtitle,
               textAlign: TextAlign.center,
               style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-                height: 1.5,
-              ),
+                  fontSize: 14, color: Colors.grey.shade600, height: 1.5),
             ),
             const SizedBox(height: 16),
-
-            // ── FutureBuilder for email status ──
             FutureBuilder<bool>(
               future: _emailFuture,
               builder: (context, snapshot) {
@@ -221,18 +277,12 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
                         width: 14,
                         height: 14,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Color(0xFF7FC014),
-                        ),
+                            strokeWidth: 2, color: Color(0xFF7FC014)),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        'Sending confirmation email...',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
+                      Text('Sending confirmation email...',
+                          style: GoogleFonts.poppins(
+                              fontSize: 12, color: Colors.grey.shade500)),
                     ],
                   );
                 } else if (snapshot.data == true) {
@@ -242,14 +292,11 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
                       const Icon(Icons.email_rounded,
                           size: 16, color: Color(0xFF7FC014)),
                       const SizedBox(width: 6),
-                      Text(
-                        'Confirmation email sent!',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: const Color(0xFF7FC014),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      Text('Confirmation email sent!',
+                          style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: const Color(0xFF7FC014),
+                              fontWeight: FontWeight.w500)),
                     ],
                   );
                 } else {
@@ -259,20 +306,16 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
                       const Icon(Icons.warning_amber_rounded,
                           size: 16, color: Colors.orange),
                       const SizedBox(width: 6),
-                      Text(
-                        'Email could not be sent',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color: Colors.orange,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                      Text('Email could not be sent',
+                          style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.orange,
+                              fontWeight: FontWeight.w500)),
                     ],
                   );
                 }
               },
             ),
-
             const SizedBox(height: 16),
             Container(
               width: double.infinity,
@@ -299,8 +342,7 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
                   backgroundColor: const Color(0xFF7FC014),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                      borderRadius: BorderRadius.circular(14)),
                 ),
                 onPressed: () {
                   if (cfg.isSuccess) {
@@ -309,10 +351,9 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
                     Navigator.pop(context);
                   }
                 },
-                child: Text(
-                  cfg.buttonLabel,
-                  style: GoogleFonts.righteous(fontSize: 20, color: Colors.white),
-                ),
+                child: Text(cfg.buttonLabel,
+                    style: GoogleFonts.righteous(
+                        fontSize: 20, color: Colors.white)),
               ),
             ),
           ],
@@ -325,18 +366,14 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade600),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.poppins(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
+        Text(label,
+            style: GoogleFonts.poppins(
+                fontSize: 13, color: Colors.grey.shade600)),
+        Text(value,
+            style: GoogleFonts.poppins(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87)),
       ],
     );
   }

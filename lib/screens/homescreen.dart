@@ -15,6 +15,7 @@ import 'package:unibus/screens/notifications.dart';
 import 'package:unibus/screens/profilescreen.dart';
 import 'package:unibus/screens/transactions.dart';
 import 'package:unibus/screens/login.dart';
+import 'package:unibus/screens/schedulepage.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -51,15 +52,10 @@ class _HomeScreenState extends State<HomeScreen> {
           style: GoogleFonts.righteous(color: Colors.black, fontSize: 24),
         ),
         actions: [
-          // 🔔 Notifications
           IconButton(
             icon: const Icon(Icons.notifications_none, color: Colors.black),
-            onPressed: () {
-              _onOptionSelected(3);
-            },
+            onPressed: () => _onOptionSelected(3),
           ),
-
-          // 👤 Avatar
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: GestureDetector(
@@ -82,9 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton.large(
         backgroundColor: Colors.green.shade700,
         shape: const CircleBorder(),
-        onPressed: () {
-          _onOptionSelected(4);
-        },
+        onPressed: () => _onOptionSelected(4),
         child: const Icon(Icons.qr_code_scanner, color: Colors.white),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -132,13 +126,13 @@ class _HomeContentState extends State<HomeContent> {
   final GlobalKey _cardKey = GlobalKey();
 
   bool isLoading = true;
-
   String studentId = "";
   String name = "";
   String batch = "";
   String year = "";
   String cardStatus = "";
   String schedule = "";
+  DateTime? expiryDate;        // ← new
 
   @override
   void initState() {
@@ -169,13 +163,31 @@ class _HomeContentState extends State<HomeContent> {
 
       final data = studentDoc.data()!;
 
+      // ── Expiry check ──
+      DateTime? parsedExpiry;
+      final rawExpiry = data['expiryDate'];
+      if (rawExpiry != null) {
+        parsedExpiry = (rawExpiry as Timestamp).toDate();
+
+        // Auto-set inactive if expired
+        if (parsedExpiry.isBefore(DateTime.now()) &&
+            data['cardStatus'] == 'active') {
+          await FirebaseFirestore.instance
+              .collection('students')
+              .doc(fetchedStudentId)
+              .update({'cardStatus': 'inactive'});
+          data['cardStatus'] = 'inactive';
+        }
+      }
+
       setState(() {
         studentId = fetchedStudentId;
         name = data['name'] ?? "";
         batch = data['batch'] ?? "";
         year = data['year'].toString();
-        cardStatus = data['cardStatus'] ?? "";
+        cardStatus = data['cardStatus'] ?? "inactive";
         schedule = data['schedule'] ?? "No schedule available";
+        expiryDate = parsedExpiry;
         isLoading = false;
       });
     } catch (e) {
@@ -187,18 +199,16 @@ class _HomeContentState extends State<HomeContent> {
     try {
       final boundary =
           _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
-
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/unibus_card.png');
       await file.writeAsBytes(pngBytes);
-
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'Here’s my UniBus card 🚌');
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: "Here's my UniBus card 🚌",
+      );
     } catch (e) {
       debugPrint("Error sharing card: $e");
     }
@@ -220,6 +230,7 @@ class _HomeContentState extends State<HomeContent> {
               cardNumber: studentId,
               holdername: name,
               validity: cardStatus.toUpperCase(),
+              expiryDate: expiryDate,         // ← pass expiry
               onOptionSelected: widget.onOptionSelected,
             ),
           ),
@@ -231,7 +242,15 @@ class _HomeContentState extends State<HomeContent> {
           const SizedBox(height: 32),
           MoreSection(onOptionSelected: widget.onOptionSelected),
           const SizedBox(height: 32),
-          ScheduleTitle(schedule: schedule),
+          ScheduleTitle(
+            schedule: schedule,
+            onViewFull: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SchedulePage()),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -242,6 +261,7 @@ class BusCard extends StatelessWidget {
   final String cardNumber;
   final String validity;
   final String holdername;
+  final DateTime? expiryDate;          // ← new
   final Function(int) onOptionSelected;
 
   const BusCard({
@@ -250,7 +270,16 @@ class BusCard extends StatelessWidget {
     required this.holdername,
     required this.validity,
     required this.onOptionSelected,
+    this.expiryDate,
   });
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +310,7 @@ class BusCard extends StatelessWidget {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
                       holdername,
                       style: const TextStyle(
@@ -290,12 +319,48 @@ class BusCard extends StatelessWidget {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
+                    // Status badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isActive
+                                ? Icons.check_circle
+                                : Icons.cancel,
+                            color: Colors.white,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            validity,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // Expiry date
                     Text(
-                      validity,
+                      expiryDate != null
+                          ? isActive
+                              ? 'Valid Until: ${_formatDate(expiryDate!)}'
+                              : 'Expired: ${_formatDate(expiryDate!)}'
+                          : 'No active pass',
                       style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white70,
+                        fontSize: 11,
+                        color: Colors.white60,
                       ),
                     ),
                   ],
@@ -318,7 +383,11 @@ class OptionsRow extends StatelessWidget {
   final Function(int) onOptionSelected;
   final VoidCallback? onSendTap;
 
-  const OptionsRow({super.key, required this.onOptionSelected, this.onSendTap});
+  const OptionsRow({
+    super.key,
+    required this.onOptionSelected,
+    this.onSendTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -328,10 +397,7 @@ class OptionsRow extends StatelessWidget {
         _option(Icons.share, "Send", onSendTap),
         _option(Icons.receipt_long, "Bills", () => onOptionSelected(1)),
         _option(
-          Icons.account_balance_wallet,
-          "Topup",
-          () => onOptionSelected(2),
-        ),
+            Icons.account_balance_wallet, "Topup", () => onOptionSelected(2)),
       ],
     );
   }
@@ -357,25 +423,70 @@ class OptionsRow extends StatelessWidget {
 
 class ScheduleTitle extends StatelessWidget {
   final String schedule;
+  final VoidCallback onViewFull;
 
-  const ScheduleTitle({super.key, required this.schedule});
+  const ScheduleTitle({
+    super.key,
+    required this.schedule,
+    required this.onViewFull,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text('Schedule', style: GoogleFonts.righteous(fontSize: 20)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Schedule', style: GoogleFonts.righteous(fontSize: 20)),
+            GestureDetector(
+              onTap: onViewFull,
+              child: Row(
+                children: [
+                  Text(
+                    'View All',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      color: const Color(0xFF7FC014),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right,
+                      color: Color(0xFF7FC014), size: 18),
+                ],
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
-        Card(
-          color: const Color(0xFF7FC014),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(30),
-            child: Text(
-              schedule,
-              style: const TextStyle(color: Colors.white, fontSize: 18),
+        GestureDetector(
+          onTap: onViewFull,
+          child: Card(
+            color: const Color(0xFF7FC014),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(30),
+              child: Row(
+                children: [
+                  const Icon(Icons.directions_bus_rounded,
+                      color: Colors.white, size: 28),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      schedule,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right,
+                      color: Colors.white70, size: 22),
+                ],
+              ),
             ),
           ),
         ),
@@ -401,10 +512,13 @@ class MoreSection extends StatelessWidget {
               "Notifications",
               () => onOptionSelected(3),
             ),
-            _moreOption(Icons.credit_card, "E-Card", () => onOptionSelected(4)),
+            _moreOption(
+              Icons.credit_card,
+              "E-Card",
+              () => onOptionSelected(4),
+            ),
             _moreOption(Icons.logout, "Logout", () async {
               await FirebaseAuth.instance.signOut();
-
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
