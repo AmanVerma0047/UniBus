@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:unibus/screens/upiappspage.dart';
-import 'package:upi_pay/upi_pay.dart';
 import 'package:http/http.dart' as http;
 import 'package:unibus/services/API_KEYS.dart';
+
 class PaymentPage extends StatefulWidget {
   final String stop;
   final String duration;
@@ -22,51 +22,6 @@ class PaymentPage extends StatefulWidget {
 }
 
 class _PaymentPageState extends State<PaymentPage> {
-  final UpiPay _upiPay = UpiPay();
-
-  Future<void> startPayment() async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    await Future.delayed(const Duration(seconds: 1));
-
-    final response = await _upiPay.initiateTransaction(
-      app: UpiApplication.googlePay, // direct open (best guess)
-      receiverUpiAddress: ApiKeys.receiverupiID,
-      receiverName: "UniBus",
-      transactionRef: DateTime.now().millisecondsSinceEpoch.toString(),
-      transactionNote: "Bus Pass Payment",
-      amount: widget.amount.toString(),
-    );
-
-    Navigator.pop(context); // remove loader
-
-    if (response.status == UpiTransactionStatus.success) {
-      await sendEmail();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("✅ Payment Successful!"),
-          backgroundColor: Color(0XFF7FC014),
-        ),
-      );
-
-      Future.delayed(const Duration(milliseconds: 800), () {
-        Navigator.pop(context);
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("❌ Payment Failed or Cancelled"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
   Future<void> sendEmail() async {
     await http.post(
       Uri.parse("https://api.emailjs.com/api/v1.0/email/send"),
@@ -90,52 +45,165 @@ class _PaymentPageState extends State<PaymentPage> {
 
   @override
   Widget build(BuildContext context) {
+    final transactionRef =
+        DateTime.now().millisecondsSinceEpoch.toString();
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F5),
       appBar: AppBar(
-        title: Text(
-          'Payment',
-          style: GoogleFonts.righteous(color: Colors.black, fontSize: 24),
-        ),
         backgroundColor: Colors.white,
         elevation: 1,
+        // ── Black back arrow ──────────────────────
+        iconTheme: const IconThemeData(color: Colors.black),
+        title: Text(
+          'Payment',
+          style: GoogleFonts.spaceGrotesk(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Colors.black),
+        ),
       ),
-      body: Center(
-        child: Card(
-          elevation: 4,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: const Color(0xFF7FC014),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset('assets/upiqr.jpeg', fit: BoxFit.contain),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              // ── Section label ──────────────────────
+              Text('ORDER SUMMARY',
+                  style: GoogleFonts.spaceGrotesk(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black38,
+                      letterSpacing: 1)),
+              const SizedBox(height: 10),
+
+              // ── Summary card ───────────────────────
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Column(
+                  children: [
+                    // Header
+                    Container(
+                      color: Colors.black,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
+                      child: Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('BUS PASS',
+                              style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white54,
+                                  letterSpacing: 1)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade700,
+                              borderRadius:
+                                  BorderRadius.circular(100),
+                            ),
+                            child: Text('Pending',
+                                style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Rows
+                    Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 4),
+                      child: Column(
+                        children: [
+                          _SumRow(
+                              label: 'Stop',
+                              value: widget.stop),
+                          _SumRow(
+                              label: 'Duration',
+                              value: widget.duration),
+                          _SumRow(
+                              label: 'Transaction Ref',
+                              value: '#$transactionRef',
+                              mono: true),
+                          _SumRow(
+                              label: 'Payment To',
+                              value: 'UniBus'),
+                        ],
+                      ),
+                    ),
+                    // Total footer
+                    Container(
+                      color: const Color(0xFF7FC014),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      child: Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Total Amount',
+                              style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 13,
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w500)),
+                          Text('₹${widget.amount}',
+                              style: GoogleFonts.dmMono(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
+              ),
 
-                const Text(
-                  "Confirm Your Payment",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              const SizedBox(height: 16),
+
+              // ── Info note ──────────────────────────
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF3DE),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                const SizedBox(height: 16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        color: Color(0xFF3B6D11), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'You will be redirected to your UPI app to complete this payment securely. Do not close the app during the transaction.',
+                        style: GoogleFonts.spaceGrotesk(
+                            fontSize: 13,
+                            color: const Color(0xFF3B6D11),
+                            height: 1.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-                Text("Stop: ${widget.stop}"),
-                Text("Duration: ${widget.duration}"),
-                Text("Amount: ₹${widget.amount}"),
+              const SizedBox(height: 24),
 
-                const SizedBox(height: 24),
-
-                ElevatedButton(
+              // ── Pay Now button ─────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
                   onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => UpiAppsPage(
+                        builder: (_) => UpiAppsPage(
                           stop: widget.stop,
                           duration: widget.duration,
                           amount: widget.amount,
@@ -144,27 +212,69 @@ class _PaymentPageState extends State<PaymentPage> {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 24,
-                    ),
+                    backgroundColor: Colors.black,
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
+                    elevation: 0,
                   ),
-                  child: Text(
-                    'Pay Now',
-                    style: GoogleFonts.righteous(
-                      color: const Color(0xFF7FC014),
-                      fontSize: 24,
-                    ),
-                  ),
+                  child: Text('Pay Now →',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white)),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Reusable summary row ──────────────────────────────
+class _SumRow extends StatelessWidget {
+  final String label, value;
+  final bool mono;
+
+  const _SumRow({
+    required this.label,
+    required this.value,
+    this.mono = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      decoration: const BoxDecoration(
+        border: Border(
+            bottom: BorderSide(color: Color(0xFFF3F3F3))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: GoogleFonts.spaceGrotesk(
+                  fontSize: 13, color: Colors.black38)),
+          Flexible(
+            child: Text(value,
+                textAlign: TextAlign.right,
+                overflow: TextOverflow.ellipsis,
+                style: mono
+                    ? GoogleFonts.dmMono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87)
+                    : GoogleFonts.spaceGrotesk(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black)),
+          ),
+        ],
       ),
     );
   }

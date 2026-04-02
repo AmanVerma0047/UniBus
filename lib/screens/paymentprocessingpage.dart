@@ -29,11 +29,14 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
   bool _isLaunching = true;
   bool _isSuccess = false;
   final UpiPay _upiPay = UpiPay();
-  late Future<bool> _emailFuture;
+
+  Future<bool>? _emailFuture;
 
   static const String _receiverUpiId = ApiKeys.receiverupiID;
   static const String _receiverName = 'UniBus';
   static const String _txnNote = 'Bus Pass Payment';
+
+  String? _studentId;
 
   @override
   void initState() {
@@ -41,9 +44,44 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
     _launchUpiApp();
   }
 
+  // fetching student id from users collection
+  Future<String?> _resolveStudentId() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+
+      if (uid == null) {
+        debugPrint(' UID is null');
+        return null;
+      }
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (!userDoc.exists) {
+        debugPrint(' User doc not found');
+        return null;
+      }
+
+      final data = userDoc.data();
+      debugPrint(' User data: $data');
+
+      final studentId = data?['studentId']?.toString();
+
+      debugPrint(' studentId: $studentId');
+
+      return studentId;
+    } catch (e) {
+      debugPrint(' studentId error: $e');
+      return null;
+    }
+  }
+
+  //  dummy payment gateway integration
   Future<void> _launchUpiApp() async {
     try {
-      _upiPay.initiateTransaction(
+      await _upiPay.initiateTransaction(
         amount: widget.amount.toString(),
         app: widget.app.upiApplication,
         receiverUpiAddress: _receiverUpiId,
@@ -52,20 +90,22 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
         transactionNote: _txnNote,
       );
 
-      await Future.delayed(const Duration(seconds: 3));
-      if (!mounted) return;
+      await Future.delayed(
+        const Duration(seconds: 2),
+      ); //checks if the app is open for duration of 2 seconds
 
+      if (!mounted) return;
       setState(() {
+        //making the status to success for the payment
         _isSuccess = true;
         _isLaunching = false;
-        _emailFuture = _sendEmail();
+        _emailFuture = _sendEmail(); //send email once the payment is done
       });
-
-      await _saveTransaction();
+      await _saveTransaction(); //saving transaction details to the firebase server
     } catch (e) {
-      await Future.delayed(const Duration(seconds: 3));
-      if (!mounted) return;
+      debugPrint(' Payment error: $e'); //else payment error
 
+      if (!mounted) return;
       setState(() {
         _isSuccess = true;
         _isLaunching = false;
@@ -76,68 +116,105 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
     }
   }
 
-  // Parses "1 month", "3 months", "6 months" → int
+  //parsing duration from the month
+  //Extracts the first number from a string and returns it as an integer. If no number exists, it returns 1.
   int _parseDurationMonths(String duration) {
     final match = RegExp(r'(\d+)').firstMatch(duration);
     return match != null ? int.parse(match.group(1)!) : 1;
   }
 
+  // save the transaction to the server
   Future<void> _saveTransaction() async {
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
+      _studentId = await _resolveStudentId(); //get student id from the server
+
+      if (_studentId == null) {
+        debugPrint(' studentId NULL — stopping');
+        return;
+      }
 
       final now = DateTime.now();
-      final txnRef = 'UNIBUS-${now.millisecondsSinceEpoch}';
+      final txnRef =
+          'UNIBUS-${now.millisecondsSinceEpoch}'; //refering a txn ID based on the time passed since epoch
+      final months = _parseDurationMonths(
+        widget.duration,
+      ); //initialization of duration to month variable in integer
 
-      // Calculate expiry from payment date + duration months
-      final months = _parseDurationMonths(widget.duration);
-      final expiryDate = DateTime(now.year, now.month + months, now.day);
+      debugPrint(' Saving for $_studentId'); // console log for debug purpose
 
-      // Save transaction under student subcollection
-      await FirebaseFirestore.instance
+      final studentRef = FirebaseFirestore
+          .instance //taking a copy of the data from the database
           .collection('students')
-          .doc(uid)
-          .collection('transactions')
-          .doc(txnRef)
-          .set({
+          .doc(_studentId);
+
+      final studentDoc = await studentRef.get(); // storing that in studentDoc
+
+      DateTime baseDate = now;
+      DateTime? previousExpiry;
+      int previousMonths = 0;
+
+
+      if (studentDoc.exists) {
+        final data = studentDoc.data();
+        final rawExpiry =data?['expiryDate']; // saving the expiryDate from the data
+        final prevValidity = data?['validity']; //saving the validity from the data 
+
+        if (prevValidity != null) {
+          previousMonths = _parseDurationMonths(prevValidity); // parshing validity to get the integer from pass
+        }
+
+        if (rawExpiry != null) {
+          previousExpiry = (rawExpiry as Timestamp).toDate(); //parshing the expiry date to get the integer expiry date
+
+          if (previousExpiry.isAfter(now)) {
+            baseDate = previousExpiry;
+            debugPrint('📅 Extending existing pass'); //extending the pass to the next expiry date
+          }
+        }
+      }
+      //extending the pass structure
+    
+      final newExpiry = DateTime(  
+        baseDate.year,
+        baseDate.month + months,
+        baseDate.day,
+      );
+
+      final totalMonths = previousMonths + months;
+
+      debugPrint('🆕 New Expiry: $newExpiry');
+      debugPrint('🆕 New Pass: $totalMonths');
+
+      //  Save transaction to the firebase
+      await studentRef.collection('transactions').doc(txnRef).set({
         'stop': widget.stop,
         'duration': widget.duration,
         'amount': widget.amount,
         'status': 'success',
         'txnRef': txnRef,
         'timestamp': FieldValue.serverTimestamp(),
-        'month': _monthName(now.month),
-        'date': '${now.day} ${_monthName(now.month)}',
-        'expiryDate': Timestamp.fromDate(expiryDate),
+        'transactionDate': Timestamp.fromDate(now),
+        'newExpiryDate': Timestamp.fromDate(newExpiry),
       });
 
-      // Update student document with new expiry date and set card active
-      await FirebaseFirestore.instance
-          .collection('students')
-          .doc(uid)
-          .update({
+      debugPrint(' Transaction saved');
+
+      // Updating main student collections
+      await studentRef.set({
         'cardStatus': 'active',
-        'expiryDate': Timestamp.fromDate(expiryDate),
-      });
+        'expiryDate': Timestamp.fromDate(newExpiry),
+        'validity':'$totalMonths months',
+        'stop': widget.stop,
+      }, SetOptions(merge: true));
 
-      debugPrint('Transaction saved! Expiry: $expiryDate');
+      debugPrint(' Student updated SUCCESS');
     } catch (e) {
-      debugPrint('Firestore error: $e');
+      debugPrint(' Firestore error: $e');
     }
   }
 
-  String _monthName(int month) {
-    const months = [
-      'January', 'February', 'March', 'April',
-      'May', 'June', 'July', 'August',
-      'September', 'October', 'November', 'December'
-    ];
-    return months[month - 1];
-  }
-
+  //sending Email after finishing the transaction 
   Future<bool> _sendEmail() async {
-    await Future.delayed(const Duration(milliseconds: 500));
     try {
       final response = await http.post(
         Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
@@ -148,7 +225,6 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
           'user_id': ApiKeys.emailJsPublicKey,
           'template_params': {
             'to_email': 'vaman0183@gmail.com',
-            'name': 'SHC Student',
             'stop': widget.stop,
             'duration': widget.duration,
             'amount': widget.amount.toString(),
@@ -156,243 +232,51 @@ class _PaymentProcessingPageState extends State<PaymentProcessingPage> {
         }),
       );
 
-      debugPrint('Email status: ${response.statusCode}');
       return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('Email error: $e');
+    } catch (_) {
       return false;
     }
   }
 
-  _StatusConfig get _statusConfig {
-    if (_isSuccess) {
-      return const _StatusConfig(
-        icon: Icons.check_circle_rounded,
-        iconColor: Color(0xFF7FC014),
-        title: 'Payment Successful!',
-        subtitle: 'Your bus pass has been activated.\nA confirmation has been sent to your email.',
-        buttonLabel: 'Go to Home',
-        isSuccess: true,
-      );
-    } else {
-      return const _StatusConfig(
-        icon: Icons.cancel_rounded,
-        iconColor: Colors.red,
-        title: 'Payment Failed',
-        subtitle: 'The transaction could not be completed.\nPlease try again.',
-        buttonLabel: 'Try Again',
-        isSuccess: false,
-      );
-    }
-  }
 
+
+//UI after the transaction has been done
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Text(
-          'Processing Payment',
-          style: GoogleFonts.righteous(color: Colors.black, fontSize: 22),
-        ),
-      ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 400),
-        child: _isLaunching ? _buildLaunching() : _buildResult(),
-      ),
-    );
-  }
-
-  Widget _buildLaunching() {
-    return Center(
-      key: const ValueKey('launching'),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(
-            width: 64,
-            height: 64,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: Color(0xFF7FC014),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Opening payment app...',
-            style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade700),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Please complete the payment in\n'
-            '${widget.app.upiApplication.toString().split('.').last}',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey.shade500),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Processing Payment')),
+      body: _isLaunching
+          ? const Center(child: CircularProgressIndicator())
+          : _buildResult(),
     );
   }
 
   Widget _buildResult() {
-    final cfg = _statusConfig;
     return Center(
-      key: const ValueKey('result'),
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: cfg.iconColor.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(cfg.icon, size: 56, color: cfg.iconColor),
-            ),
-            const SizedBox(height: 24),
-            Text(cfg.title,
-                style: GoogleFonts.righteous(fontSize: 24, color: Colors.black87)),
-            const SizedBox(height: 12),
-            Text(
-              cfg.subtitle,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                  fontSize: 14, color: Colors.grey.shade600, height: 1.5),
-            ),
-            const SizedBox(height: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.check_circle, size: 60, color: Colors.green),
+          const SizedBox(height: 20),
+          const Text('Payment Successful'),
+
+          const SizedBox(height: 16),
+
+          if (_emailFuture != null)
             FutureBuilder<bool>(
               future: _emailFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Color(0xFF7FC014)),
-                      ),
-                      const SizedBox(width: 8),
-                      Text('Sending confirmation email...',
-                          style: GoogleFonts.poppins(
-                              fontSize: 12, color: Colors.grey.shade500)),
-                    ],
-                  );
+                  return const Text('Sending email...');
                 } else if (snapshot.data == true) {
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.email_rounded,
-                          size: 16, color: Color(0xFF7FC014)),
-                      const SizedBox(width: 6),
-                      Text('Confirmation email sent!',
-                          style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: const Color(0xFF7FC014),
-                              fontWeight: FontWeight.w500)),
-                    ],
-                  );
+                  return const Text('Email sent');
                 } else {
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.warning_amber_rounded,
-                          size: 16, color: Colors.orange),
-                      const SizedBox(width: 6),
-                      Text('Email could not be sent',
-                          style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.orange,
-                              fontWeight: FontWeight.w500)),
-                    ],
-                  );
+                  return const Text('Email failed');
                 }
               },
             ),
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEAF7EB),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  _summaryRow('Stop', widget.stop),
-                  const SizedBox(height: 6),
-                  _summaryRow('Duration', widget.duration),
-                  const SizedBox(height: 6),
-                  _summaryRow('Amount', '\u20B9${widget.amount}'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF7FC014),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                onPressed: () {
-                  if (cfg.isSuccess) {
-                    Navigator.popUntil(context, (route) => route.isFirst);
-                  } else {
-                    Navigator.pop(context);
-                  }
-                },
-                child: Text(cfg.buttonLabel,
-                    style: GoogleFonts.righteous(
-                        fontSize: 20, color: Colors.white)),
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
-
-  Widget _summaryRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: GoogleFonts.poppins(
-                fontSize: 13, color: Colors.grey.shade600)),
-        Text(value,
-            style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87)),
-      ],
-    );
-  }
-}
-
-class _StatusConfig {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final String buttonLabel;
-  final bool isSuccess;
-
-  const _StatusConfig({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.buttonLabel,
-    required this.isSuccess,
-  });
 }

@@ -125,22 +125,18 @@ class HomeContent extends StatefulWidget {
 class _HomeContentState extends State<HomeContent> {
   final GlobalKey _cardKey = GlobalKey();
 
-  bool isLoading = true;
-  String studentId = "";
-  String name = "";
-  String batch = "";
-  String year = "";
-  String cardStatus = "";
-  String schedule = "";
-  DateTime? expiryDate;        // ← new
+  // studentId is fetched once; stream does the rest
+  String? _studentId;
+  bool _loadingStudentId = true;
 
   @override
   void initState() {
     super.initState();
-    fetchStudentData();
+    _fetchStudentId();
   }
 
-  Future<void> fetchStudentData() async {
+  /// Fetch studentId from users/{uid} once — everything else is streamed
+  Future<void> _fetchStudentId() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
@@ -152,46 +148,12 @@ class _HomeContentState extends State<HomeContent> {
 
       if (!userDoc.exists) return;
 
-      final fetchedStudentId = userDoc['studentId'];
-
-      final studentDoc = await FirebaseFirestore.instance
-          .collection('students')
-          .doc(fetchedStudentId)
-          .get();
-
-      if (!studentDoc.exists) return;
-
-      final data = studentDoc.data()!;
-
-      // ── Expiry check ──
-      DateTime? parsedExpiry;
-      final rawExpiry = data['expiryDate'];
-      if (rawExpiry != null) {
-        parsedExpiry = (rawExpiry as Timestamp).toDate();
-
-        // Auto-set inactive if expired
-        if (parsedExpiry.isBefore(DateTime.now()) &&
-            data['cardStatus'] == 'active') {
-          await FirebaseFirestore.instance
-              .collection('students')
-              .doc(fetchedStudentId)
-              .update({'cardStatus': 'inactive'});
-          data['cardStatus'] = 'inactive';
-        }
-      }
-
       setState(() {
-        studentId = fetchedStudentId;
-        name = data['name'] ?? "";
-        batch = data['batch'] ?? "";
-        year = data['year'].toString();
-        cardStatus = data['cardStatus'] ?? "inactive";
-        schedule = data['schedule'] ?? "No schedule available";
-        expiryDate = parsedExpiry;
-        isLoading = false;
+        _studentId = userDoc['studentId'];
+        _loadingStudentId = false;
       });
     } catch (e) {
-      debugPrint("Error fetching student data: $e");
+      debugPrint('Error fetching studentId: $e');
     }
   }
 
@@ -210,49 +172,95 @@ class _HomeContentState extends State<HomeContent> {
         text: "Here's my UniBus card 🚌",
       );
     } catch (e) {
-      debugPrint("Error sharing card: $e");
+      debugPrint('Error sharing card: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    if (_loadingStudentId) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        children: [
-          RepaintBoundary(
-            key: _cardKey,
-            child: BusCard(
-              cardNumber: studentId,
-              holdername: name,
-              validity: cardStatus.toUpperCase(),
-              expiryDate: expiryDate,         // ← pass expiry
-              onOptionSelected: widget.onOptionSelected,
-            ),
+    if (_studentId == null) {
+      return const Center(child: Text('Student data not found.'));
+    }
+
+    /// Real-time stream — rebuilds automatically whenever Firestore changes
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .doc(_studentId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const Center(child: Text('No student record found.'));
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+
+        final name       = data['name'] ?? '';
+        final batch      = data['batch'] ?? '';
+        final year       = data['year']?.toString() ?? '';
+        String cardStatus = data['cardStatus'] ?? 'inactive';
+        final validity   = data['validity'] ?? '';
+        final schedule   = data['schedule'] ?? 'No schedule available';
+
+        DateTime? expiryDate;
+        final rawExpiry = data['expiryDate'];
+        if (rawExpiry != null) {
+          expiryDate = (rawExpiry as Timestamp).toDate();
+          // Auto-deactivate locally if expired
+          if (expiryDate.isBefore(DateTime.now()) && cardStatus == 'active') {
+            cardStatus = 'inactive';
+            // Push update to Firestore silently
+            FirebaseFirestore.instance
+                .collection('students')
+                .doc(_studentId)
+                .update({'cardStatus': 'inactive'});
+          }
+        }
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              RepaintBoundary(
+                key: _cardKey,
+                child: BusCard(
+                  cardNumber: _studentId!,
+                  holdername: name,
+                  validity: cardStatus.toUpperCase(),
+                  passValidity: validity,
+                  expiryDate: expiryDate,
+                  onOptionSelected: widget.onOptionSelected,
+                ),
+              ),
+              const SizedBox(height: 32),
+              OptionsRow(
+                onOptionSelected: widget.onOptionSelected,
+                onSendTap: _shareCard,
+              ),
+              const SizedBox(height: 32),
+              MoreSection(onOptionSelected: widget.onOptionSelected),
+              const SizedBox(height: 32),
+              ScheduleTitle(
+                schedule: schedule,
+                onViewFull: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SchedulePage()),
+                  );
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 32),
-          OptionsRow(
-            onOptionSelected: widget.onOptionSelected,
-            onSendTap: _shareCard,
-          ),
-          const SizedBox(height: 32),
-          MoreSection(onOptionSelected: widget.onOptionSelected),
-          const SizedBox(height: 32),
-          ScheduleTitle(
-            schedule: schedule,
-            onViewFull: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SchedulePage()),
-              );
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -261,7 +269,8 @@ class BusCard extends StatelessWidget {
   final String cardNumber;
   final String validity;
   final String holdername;
-  final DateTime? expiryDate;          // ← new
+  final String passValidity;
+  final DateTime? expiryDate;
   final Function(int) onOptionSelected;
 
   const BusCard({
@@ -269,6 +278,7 @@ class BusCard extends StatelessWidget {
     required this.cardNumber,
     required this.holdername,
     required this.validity,
+    required this.passValidity,
     required this.onOptionSelected,
     this.expiryDate,
   });
@@ -278,12 +288,12 @@ class BusCard extends StatelessWidget {
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+    return '${date.day} ${months[date.month - 1]} ${date.year}'; // used to create the date for the card
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool isActive = validity.toLowerCase() == "active";
+    final bool isActive = validity.toLowerCase() == 'active';
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -332,9 +342,7 @@ class BusCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            isActive
-                                ? Icons.check_circle
-                                : Icons.cancel,
+                            isActive ? Icons.check_circle : Icons.cancel,
                             color: Colors.white,
                             size: 12,
                           ),
@@ -363,11 +371,22 @@ class BusCard extends StatelessWidget {
                         color: Colors.white60,
                       ),
                     ),
+                    // Pass validity / duration
+                    if (passValidity.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Pass: $passValidity',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.white60,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
               QrImageView(
-                data: "$cardNumber|$holdername|$validity",
+                data: '$cardNumber|$holdername|$validity',
                 size: 110,
                 backgroundColor: Colors.white,
               ),
@@ -394,10 +413,10 @@ class OptionsRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _option(Icons.share, "Send", onSendTap),
-        _option(Icons.receipt_long, "Bills", () => onOptionSelected(1)),
-        _option(
-            Icons.account_balance_wallet, "Topup", () => onOptionSelected(2)),
+        _option(Icons.share, 'Send', onSendTap),
+        _option(Icons.receipt_long, 'Bills', () => onOptionSelected(1)),
+        _option(Icons.account_balance_wallet, 'Topup',
+            () => onOptionSelected(2)),
       ],
     );
   }
@@ -509,15 +528,15 @@ class MoreSection extends StatelessWidget {
           children: [
             _moreOption(
               Icons.notifications,
-              "Notifications",
+              'Notifications',
               () => onOptionSelected(3),
             ),
             _moreOption(
               Icons.credit_card,
-              "E-Card",
+              'E-Card',
               () => onOptionSelected(4),
             ),
-            _moreOption(Icons.logout, "Logout", () async {
+            _moreOption(Icons.logout, 'Logout', () async {
               await FirebaseAuth.instance.signOut();
               Navigator.pushAndRemoveUntil(
                 context,
