@@ -3,21 +3,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AuthService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
-  static final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// =========================
-  /// REGISTER
-  /// =========================
+  // =========================
+  // REGISTER
+  // =========================
   static Future<void> register({
     required String studentId,
     required String password,
   }) async {
     try {
       final formattedId = studentId.trim().toUpperCase();
-      final email = "$formattedId@unibus.app";
+      final email = '$formattedId@unibus.app';
 
-      // 1 Check if Student ID exists in students collection
+      // 1. Check if Student ID exists in students collection
       final studentDoc = await _firestore
           .collection('students')
           .doc(formattedId)
@@ -29,7 +28,7 @@ class AuthService {
 
       final studentData = studentDoc.data()!;
 
-      // 2 Prevent duplicate registration
+      // 2. Prevent duplicate registration
       final existingUser = await _firestore
           .collection('users')
           .where('studentId', isEqualTo: formattedId)
@@ -40,70 +39,138 @@ class AuthService {
         throw Exception('Account already exists');
       }
 
-      // 3 Create Firebase Auth account
-      final credential =
-          await _auth.createUserWithEmailAndPassword(
+      // 3. Create Firebase Auth account
+      final credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // 4 Copy student data into users collection
+      // 4. Save to users collection
       await _firestore
           .collection('users')
           .doc(credential.user!.uid)
           .set({
         'studentId': formattedId,
-        'name': studentData['name'] ?? "",
-        'batch': studentData['batch'] ?? "",
-        'year': studentData['year'] ?? "",
-        'cardStatus': studentData['cardStatus'] ?? "inactive",
+        'email': email,
+        'name': studentData['name'] ?? '',
+        'batch': studentData['batch'] ?? '',
+        'year': studentData['year'] ?? '',
+        'cardStatus': studentData['cardStatus'] ?? 'inactive',
         'role': 'student',
         'createdAt': FieldValue.serverTimestamp(),
       });
-
     } on FirebaseAuthException catch (e) {
       throw Exception(_handleAuthError(e));
     }
   }
 
-  /// =========================
-  /// LOGIN
-  /// =========================
+  // =========================
+  // LOGIN
+  // =========================
   static Future<void> login({
     required String studentId,
     required String password,
   }) async {
-    try {
-      final formattedId = studentId.trim().toUpperCase();
-      final email = "$formattedId@unibus.app";
+    String? email;
 
+    // ── Try studentId (case-insensitive search) ──
+    // Students are stored as uppercase e.g. SHC2304009
+    final upperStudentId = studentId.toUpperCase();
+    final studentSnap = await _firestore
+        .collection('users')
+        .where('studentId', isEqualTo: upperStudentId)
+        .limit(1)
+        .get();
+
+    if (studentSnap.docs.isNotEmpty) {
+      final data = studentSnap.docs.first.data();
+      email = data['email'] as String?;
+      // Fallback: construct email if field missing
+      email ??= '$upperStudentId@unibus.app';
+    }
+
+    // ── Try managerId (case-insensitive) ──
+    // Try both original input and uppercase
+    if (email == null) {
+      QuerySnapshot managerSnap = await _firestore
+          .collection('users')
+          .where('managerId', isEqualTo: studentId)
+          .limit(1)
+          .get();
+
+      // Also try uppercase version
+      if (managerSnap.docs.isEmpty) {
+        managerSnap = await _firestore
+            .collection('users')
+            .where('managerId', isEqualTo: upperStudentId)
+            .limit(1)
+            .get();
+      }
+
+      // Also try lowercase version
+      if (managerSnap.docs.isEmpty) {
+        managerSnap = await _firestore
+            .collection('users')
+            .where('managerId', isEqualTo: studentId.toLowerCase())
+            .limit(1)
+            .get();
+      }
+
+      if (managerSnap.docs.isNotEmpty) {
+        final data = managerSnap.docs.first.data()
+            as Map<String, dynamic>;
+        email = data['email'] as String?;
+        if (email == null || email.isEmpty) {
+          throw Exception(
+              'Manager account email not set up. Contact support.');
+        }
+      }
+    }
+
+    // ── Not found ──
+    if (email == null || email.isEmpty) {
+      throw Exception('No account found for this ID.');
+    }
+
+    // ── Sign in ──
+    try {
       await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-
     } on FirebaseAuthException catch (e) {
-      throw Exception(_handleAuthError(e));
+      switch (e.code) {
+        case 'wrong-password':
+        case 'invalid-credential':
+          throw Exception('Incorrect password.');
+        case 'user-not-found':
+          throw Exception('No account found for this ID.');
+        case 'user-disabled':
+          throw Exception('This account has been disabled.');
+        case 'too-many-requests':
+          throw Exception('Too many attempts. Try again later.');
+        default:
+          throw Exception('Login failed. Please try again.');
+      }
     }
   }
 
-  /// =========================
-  /// LOGOUT
-  /// =========================
+  // =========================
+  // LOGOUT
+  // =========================
   static Future<void> logout() async {
     await _auth.signOut();
   }
 
-  /// =========================
-  /// CURRENT USER
-  /// =========================
+  // =========================
+  // CURRENT USER
+  // =========================
   static User? get currentUser => _auth.currentUser;
 
-  /// =========================
-  /// ERROR HANDLER
-  /// =========================
-  static String _handleAuthError(
-      FirebaseAuthException e) {
+  // =========================
+  // ERROR HANDLER
+  // =========================
+  static String _handleAuthError(FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use':
         return 'Account already exists';

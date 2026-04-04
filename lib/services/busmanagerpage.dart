@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:unibus/screens/login.dart';
 
 class BusManagerScreen extends StatefulWidget {
   const BusManagerScreen({super.key});
@@ -8,10 +10,51 @@ class BusManagerScreen extends StatefulWidget {
   @override
   State<BusManagerScreen> createState() => _BusManagerScreenState();
 }
-
 class _BusManagerScreenState extends State<BusManagerScreen> {
   int _selectedTab = 0;
   final List<String> _tabs = ['Notifications', 'Fees', 'Schedule'];
+
+  Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        title: Text('Logout',
+            style: GoogleFonts.spaceGrotesk(
+                fontWeight: FontWeight.w700)),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: GoogleFonts.spaceGrotesk(color: Colors.black54),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+                style: GoogleFonts.spaceGrotesk(
+                    color: Colors.black54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Logout',
+                style: GoogleFonts.spaceGrotesk(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,11 +64,40 @@ class _BusManagerScreenState extends State<BusManagerScreen> {
         backgroundColor: const Color(0xFFF7F7F5),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
-        title: Text('Bus Manager',
-            style: GoogleFonts.spaceGrotesk(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: Colors.black)),
+        title: Text(
+          'Bus Manager',
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: Colors.black,
+          ),
+        ),
+        actions: [
+          GestureDetector(
+            onTap: _logout,
+            child: Container(
+              margin: const EdgeInsets.only(right: 16),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFCEBEB),
+                borderRadius: BorderRadius.circular(100),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.logout_rounded,
+                      size: 16, color: Color(0xFFA32D2D)),
+                  const SizedBox(width: 6),
+                  Text('Logout',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFFA32D2D))),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -38,13 +110,15 @@ class _BusManagerScreenState extends State<BusManagerScreen> {
                   final isActive = _selectedTab == i;
                   return Expanded(
                     child: Padding(
-                      padding:
-                          EdgeInsets.only(right: i < _tabs.length - 1 ? 8 : 0),
+                      padding: EdgeInsets.only(
+                        right: i < _tabs.length - 1 ? 8 : 0,
+                      ),
                       child: GestureDetector(
                         onTap: () => setState(() => _selectedTab = i),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
                             color: isActive ? Colors.black : Colors.white,
                             borderRadius: BorderRadius.circular(14),
@@ -55,13 +129,16 @@ class _BusManagerScreenState extends State<BusManagerScreen> {
                             ),
                           ),
                           alignment: Alignment.center,
-                          child: Text(_tabs[i],
-                              style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: isActive
-                                      ? Colors.white
-                                      : Colors.black54)),
+                          child: Text(
+                            _tabs[i],
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isActive
+                                  ? Colors.white
+                                  : Colors.black54,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -155,10 +232,14 @@ class _NotificationsTabState extends State<_NotificationsTab> {
   }
 
   void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: GoogleFonts.spaceGrotesk()),
-      backgroundColor: isError ? Colors.red.shade700 : const Color(0xFF7FC014),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: GoogleFonts.spaceGrotesk()),
+        backgroundColor: isError
+            ? Colors.red.shade700
+            : const Color(0xFF7FC014),
+      ),
+    );
   }
 
   @override
@@ -181,7 +262,9 @@ class _NotificationsTabState extends State<_NotificationsTab> {
                   duration: const Duration(milliseconds: 160),
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 14),
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: isActive ? Colors.black : Colors.white,
                     borderRadius: BorderRadius.circular(14),
@@ -202,24 +285,30 @@ class _NotificationsTabState extends State<_NotificationsTab> {
                               : cfg['bg'] as Color,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Icon(cfg['icon'] as IconData,
-                            color: isActive
-                                ? Colors.white
-                                : cfg['color'] as Color,
-                            size: 18),
+                        child: Icon(
+                          cfg['icon'] as IconData,
+                          color: isActive
+                              ? Colors.white
+                              : cfg['color'] as Color,
+                          size: 18,
+                        ),
                       ),
                       const SizedBox(width: 14),
-                      Text(cfg['label'] as String,
-                          style: GoogleFonts.spaceGrotesk(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isActive
-                                  ? Colors.white
-                                  : Colors.black)),
+                      Text(
+                        cfg['label'] as String,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isActive ? Colors.white : Colors.black,
+                        ),
+                      ),
                       const Spacer(),
                       if (isActive)
-                        const Icon(Icons.check_circle_rounded,
-                            color: Color(0xFF7FC014), size: 18),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: Color(0xFF7FC014),
+                          size: 18,
+                        ),
                     ],
                   ),
                 ),
@@ -269,7 +358,8 @@ class _NotificationsTabState extends State<_NotificationsTab> {
               return Column(
                 children: docs.map((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  final cfg = _typeConfig[doc.id] ??
+                  final cfg =
+                      _typeConfig[doc.id] ??
                       {
                         'label': doc.id,
                         'icon': Icons.notifications_rounded,
@@ -331,17 +421,20 @@ class _FeesTabState extends State<_FeesTab> {
   }
 
   void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: GoogleFonts.spaceGrotesk()),
-      backgroundColor: isError ? Colors.red.shade700 : const Color(0xFF7FC014),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: GoogleFonts.spaceGrotesk()),
+        backgroundColor: isError
+            ? Colors.red.shade700
+            : const Color(0xFF7FC014),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream:
-          FirebaseFirestore.instance.collection('Fees').snapshots(),
+      stream: FirebaseFirestore.instance.collection('Fees').snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -353,18 +446,21 @@ class _FeesTabState extends State<_FeesTab> {
         // Default select first bus
         _selectedBus ??= buses.first.id;
 
-        final currentDoc = buses.firstWhere(
-          (d) => d.id == _selectedBus,
-          orElse: () => buses.first,
-        );
-        final feesData =
-            currentDoc.data() as Map<String, dynamic>;
+        // Ensure selected bus still exists in the list (handles deletions)
+        if (!buses.any((d) => d.id == _selectedBus)) {
+          _selectedBus = buses.first.id;
+          _controllers.clear();
+        }
+
+        final currentDoc = buses.firstWhere((d) => d.id == _selectedBus);
+        final feesData = currentDoc.data() as Map<String, dynamic>;
 
         // Sync controllers
         for (final entry in feesData.entries) {
           if (!_controllers.containsKey(entry.key)) {
-            _controllers[entry.key] =
-                TextEditingController(text: entry.value.toString());
+            _controllers[entry.key] = TextEditingController(
+              text: entry.value.toString(),
+            );
           }
         }
 
@@ -381,7 +477,8 @@ class _FeesTabState extends State<_FeesTab> {
                   return Expanded(
                     child: Padding(
                       padding: EdgeInsets.only(
-                          right: bus.id != buses.last.id ? 10 : 0),
+                        right: bus.id != buses.last.id ? 10 : 0,
+                      ),
                       child: GestureDetector(
                         onTap: () => setState(() {
                           _selectedBus = bus.id;
@@ -390,10 +487,11 @@ class _FeesTabState extends State<_FeesTab> {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
                           padding: const EdgeInsets.symmetric(
-                              vertical: 12, horizontal: 8),
+                            vertical: 12,
+                            horizontal: 8,
+                          ),
                           decoration: BoxDecoration(
-                            color:
-                                isActive ? Colors.black : Colors.white,
+                            color: isActive ? Colors.black : Colors.white,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: isActive
@@ -404,21 +502,24 @@ class _FeesTabState extends State<_FeesTab> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.directions_bus_rounded,
-                                  size: 16,
-                                  color: isActive
-                                      ? Colors.white
-                                      : Colors.black38),
+                              Icon(
+                                Icons.directions_bus_rounded,
+                                size: 16,
+                                color: isActive ? Colors.white : Colors.black38,
+                              ),
                               const SizedBox(width: 6),
                               Flexible(
-                                child: Text(bus.id,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.spaceGrotesk(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: isActive
-                                            ? Colors.white
-                                            : Colors.black54)),
+                                child: Text(
+                                  bus.id,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isActive
+                                        ? Colors.white
+                                        : Colors.black54,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -439,20 +540,24 @@ class _FeesTabState extends State<_FeesTab> {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 4),
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: Colors.black.withOpacity(0.07)),
+                    border: Border.all(color: Colors.black.withOpacity(0.07)),
                   ),
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(entry.key,
-                            style: GoogleFonts.spaceGrotesk(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500)),
+                        child: Text(
+                          entry.key,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                       SizedBox(
                         width: 90,
@@ -461,14 +566,16 @@ class _FeesTabState extends State<_FeesTab> {
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.right,
                           style: GoogleFonts.dmMono(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                           decoration: InputDecoration(
                             border: InputBorder.none,
                             prefixText: '₹ ',
                             prefixStyle: GoogleFonts.dmMono(
-                                fontSize: 13,
-                                color: Colors.black38),
+                              fontSize: 13,
+                              color: Colors.black38,
+                            ),
                           ),
                         ),
                       ),
@@ -567,19 +674,20 @@ class _ScheduleTabState extends State<_ScheduleTab> {
   }
 
   void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: GoogleFonts.spaceGrotesk()),
-      backgroundColor:
-          isError ? Colors.red.shade700 : const Color(0xFF7FC014),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: GoogleFonts.spaceGrotesk()),
+        backgroundColor: isError
+            ? Colors.red.shade700
+            : const Color(0xFF7FC014),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('schedule')
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('schedule').snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -589,25 +697,29 @@ class _ScheduleTabState extends State<_ScheduleTab> {
         if (buses.isEmpty) return _EmptyState('No schedule data found.');
 
         _selectedBus ??= buses.first.id;
+        // Ensure selected bus still exists in the list (handles deletions)
+        if (!buses.any((d) => d.id == _selectedBus)) {
+          _selectedBus = buses.first.id;
+          _controllers.clear();
+        }
 
-        final currentDoc = buses.firstWhere(
-          (d) => d.id == _selectedBus,
-          orElse: () => buses.first,
-        );
-        final scheduleData =
-            currentDoc.data() as Map<String, dynamic>;
+        final currentDoc = buses.firstWhere((d) => d.id == _selectedBus);
+        final scheduleData = currentDoc.data() as Map<String, dynamic>;
 
         // Sort stops by time
         final sortedEntries = scheduleData.entries.toList()
-          ..sort((a, b) =>
-              _parseTime(a.value.toString())
-                  .compareTo(_parseTime(b.value.toString())));
+          ..sort(
+            (a, b) => _parseTime(
+              a.value.toString(),
+            ).compareTo(_parseTime(b.value.toString())),
+          );
 
         // Sync controllers
         for (final entry in sortedEntries) {
           if (!_controllers.containsKey(entry.key)) {
-            _controllers[entry.key] =
-                TextEditingController(text: entry.value.toString());
+            _controllers[entry.key] = TextEditingController(
+              text: entry.value.toString(),
+            );
           }
         }
 
@@ -624,7 +736,8 @@ class _ScheduleTabState extends State<_ScheduleTab> {
                   return Expanded(
                     child: Padding(
                       padding: EdgeInsets.only(
-                          right: bus.id != buses.last.id ? 10 : 0),
+                        right: bus.id != buses.last.id ? 10 : 0,
+                      ),
                       child: GestureDetector(
                         onTap: () => setState(() {
                           _selectedBus = bus.id;
@@ -633,10 +746,11 @@ class _ScheduleTabState extends State<_ScheduleTab> {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
                           padding: const EdgeInsets.symmetric(
-                              vertical: 12, horizontal: 8),
+                            vertical: 12,
+                            horizontal: 8,
+                          ),
                           decoration: BoxDecoration(
-                            color:
-                                isActive ? Colors.black : Colors.white,
+                            color: isActive ? Colors.black : Colors.white,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: isActive
@@ -647,21 +761,24 @@ class _ScheduleTabState extends State<_ScheduleTab> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.directions_bus_rounded,
-                                  size: 16,
-                                  color: isActive
-                                      ? Colors.white
-                                      : Colors.black38),
+                              Icon(
+                                Icons.directions_bus_rounded,
+                                size: 16,
+                                color: isActive ? Colors.white : Colors.black38,
+                              ),
                               const SizedBox(width: 6),
                               Flexible(
-                                child: Text(bus.id,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.spaceGrotesk(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: isActive
-                                            ? Colors.white
-                                            : Colors.black54)),
+                                child: Text(
+                                  bus.id,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isActive
+                                        ? Colors.white
+                                        : Colors.black54,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
@@ -685,19 +802,24 @@ class _ScheduleTabState extends State<_ScheduleTab> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: Colors.black.withOpacity(0.07)),
+                    border: Border.all(color: Colors.black.withOpacity(0.07)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.radio_button_checked,
-                          size: 12, color: Color(0xFF7FC014)),
+                      const Icon(
+                        Icons.radio_button_checked,
+                        size: 12,
+                        color: Color(0xFF7FC014),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(entry.key,
-                            style: GoogleFonts.spaceGrotesk(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500)),
+                        child: Text(
+                          entry.key,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                       SizedBox(
                         width: 80,
@@ -705,16 +827,20 @@ class _ScheduleTabState extends State<_ScheduleTab> {
                           controller: ctrl,
                           textAlign: TextAlign.center,
                           style: GoogleFonts.dmMono(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                           ),
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded,
-                            size: 18, color: Color(0xFFA32D2D)),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 18,
+                          color: Color(0xFFA32D2D),
+                        ),
                         onPressed: () => _deleteStop(entry.key),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -749,10 +875,7 @@ class _ScheduleTabState extends State<_ScheduleTab> {
                   const SizedBox(width: 8),
                   Expanded(
                     flex: 2,
-                    child: _InputBox(
-                      controller: _newTimeCtrl,
-                      hint: '8:30',
-                    ),
+                    child: _InputBox(controller: _newTimeCtrl, hint: '8:30'),
                   ),
                 ],
               ),
@@ -792,12 +915,15 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: GoogleFonts.spaceGrotesk(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: Colors.black38,
-            letterSpacing: 1));
+    return Text(
+      text,
+      style: GoogleFonts.spaceGrotesk(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: Colors.black38,
+        letterSpacing: 1,
+      ),
+    );
   }
 }
 
@@ -827,10 +953,14 @@ class _InputBox extends StatelessWidget {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: GoogleFonts.spaceGrotesk(
-              color: Colors.black26, fontSize: 14),
+            color: Colors.black26,
+            fontSize: 14,
+          ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 14),
+            horizontal: 16,
+            vertical: 14,
+          ),
         ),
       ),
     );
@@ -863,19 +993,25 @@ class _PrimaryButton extends StatelessWidget {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white))
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
             : Icon(icon, size: 18),
-        label: Text(label,
-            style: GoogleFonts.spaceGrotesk(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.white)),
+        label: Text(
+          label,
+          style: GoogleFonts.spaceGrotesk(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
         style: ElevatedButton.styleFrom(
-          backgroundColor:
-              secondary ? const Color(0xFF3B6D11) : Colors.black,
+          backgroundColor: secondary ? const Color(0xFF3B6D11) : Colors.black,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16)),
+            borderRadius: BorderRadius.circular(16),
+          ),
           elevation: 0,
         ),
       ),
@@ -892,9 +1028,10 @@ class _EmptyState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.only(top: 60),
-        child: Text(text,
-            style: GoogleFonts.spaceGrotesk(
-                fontSize: 14, color: Colors.black38)),
+        child: Text(
+          text,
+          style: GoogleFonts.spaceGrotesk(fontSize: 14, color: Colors.black38),
+        ),
       ),
     );
   }
@@ -931,8 +1068,9 @@ class _NotifCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-                color: iconBg,
-                borderRadius: BorderRadius.circular(10)),
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Icon(icon, color: iconColor, size: 18),
           ),
           const SizedBox(width: 12),
@@ -943,30 +1081,42 @@ class _NotifCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(title,
-                          style: GoogleFonts.spaceGrotesk(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600)),
+                      child: Text(
+                        title,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: iconBg,
                         borderRadius: BorderRadius.circular(100),
                       ),
-                      child: Text(type,
-                          style: GoogleFonts.spaceGrotesk(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: iconColor)),
+                      child: Text(
+                        type,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: iconColor,
+                        ),
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(message,
-                    style: GoogleFonts.spaceGrotesk(
-                        fontSize: 12, color: Colors.black45)),
+                Text(
+                  message,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 12,
+                    color: Colors.black45,
+                  ),
+                ),
               ],
             ),
           ),
