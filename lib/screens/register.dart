@@ -142,45 +142,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 const SizedBox(height: 16),
 
-                // ── Email (read-only, auto-generated) ─
-                _Label('EMAIL (AUTO-GENERATED)'),
-                const SizedBox(height: 8),
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _studentIdController,
-                  builder: (_, value, __) {
-                    final id = value.text.trim().toUpperCase();
-                    final email = id.isEmpty
-                        ? 'Your email will appear here'
-                        : '$id@unibus.app';
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1EFE8),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                            color:
-                                Colors.black.withOpacity(0.06)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.email_rounded,
-                              color: Colors.black38, size: 20),
-                          const SizedBox(width: 12),
-                          Text(email,
-                              style: GoogleFonts.spaceGrotesk(
-                                  fontSize: 14,
-                                  color: id.isEmpty
-                                      ? Colors.black26
-                                      : Colors.black54)),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
                 // ── Password ─────────────────────────
                 _Label('PASSWORD'),
                 const SizedBox(height: 8),
